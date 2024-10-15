@@ -4,7 +4,8 @@ import { RealtimeClient } from '@openai/realtime-api-beta';
 export class RealtimeRelay {
   constructor(apiKey) {
     this.apiKey = apiKey;
-    this.sockets = new WeakMap();
+    this.headSocket = null;
+    this.consumerSockets = [];
     this.wss = null;
   }
 
@@ -15,6 +16,13 @@ export class RealtimeRelay {
   }
 
   async connectionHandler(ws, req) {
+    if (this.headSocket) {
+      console.log('Head socket already connected, this one is consumer.');
+      this.consumerSockets.push(ws);
+      return;
+    }
+
+    this.headSocket = ws;
     if (!req.url) {
       this.log('No URL provided, closing connection.');
       ws.close();
@@ -38,6 +46,9 @@ export class RealtimeRelay {
     client.realtime.on('server.*', (event) => {
       this.log(`Relaying "${event.type}" to Client`);
       ws.send(JSON.stringify(event));
+      this.consumerSockets.forEach((c) => {
+        c.send(JSON.stringify(event));
+      });
     });
     client.realtime.on('close', () => ws.close());
 
